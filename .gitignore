@@ -1,0 +1,4 @@
+/.vscode
+/.pycharm
+douban/*.json
+test.py
