@@ -1,2 +1,9 @@
-# actor-clustering-analysis-with-douban
-Analyse the relation of actors' clustering (partnership) and their estimated professional level (popularity)
+# 豆瓣影人数据分析
+
+## 项目概述
+根据豆瓣收录的影人（演员/导演/编剧）和影片（电影/电视剧/综艺，等）信息，获取影人职业水平（通过豆瓣评分）和影人之间的关系（通过合作作品比例）。量化相关信息并分析，得出关于”高水平影人是否具有集聚效应“的结论。
+
+## 设计步骤
+1. 通过爬虫或者豆瓣开发者API获取影片条目和影人条目信息
+2. 分析条目信息，摘出影人合作关系并量化关系的敬慕紧密程度
+3. 可视化影人关系网，并观察影人集聚与其职业水平的关系
