@@ -2,3 +2,4 @@
 /.pycharm
 douban/*.json
 test.py
+already_request.txt
