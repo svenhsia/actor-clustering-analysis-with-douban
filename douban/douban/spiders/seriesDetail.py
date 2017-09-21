@@ -15,11 +15,12 @@ class doubanSpider(scrapy.Spider):
                    'Referer' : 'https://movie.douban.com/tv/',
                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
                    'X-Requested-With': 'XMLHttpRequest'}
-        # mongoCol = MongoClient().Douban.series
-        # serie_all = list(mongoCol.find())
-        serie_all = ["https://movie.douban.com/subject/26717834/", "https://movie.douban.com/subject/10748051/", "https://movie.douban.com/subject/4022113/"]
+        db = MongoClient().Douban
+        mongoCol = db.total
+        serie_all = list(mongoCol.find({'request-code': 0}))
+        movies = db.movies
         for s in serie_all:
-            url = s
+            url = s['url']
             yield scrapy.Request(url=url, headers=headers, method='GET', callback=self.parse)
 
 
@@ -48,9 +49,9 @@ class doubanSpider(scrapy.Spider):
         infolist = infostr.replace('<br>', '').split('\n')
         infolist = [Selector(text=item.strip()) for item in infolist if item.strip()]
 
-        itemNameDict = {"导演": 'director', "编剧": 'scripter', "主演": 'actor', "类型": 'category', "集数": 'episode',
-                        "季数": 'season', "单集片长": 'length', "官方网站": 'website', "制片国家/地区": "country/region",
-                        "语言": 'language', "首播": 'date-published', "又名": 'other-name', "IMDb链接": 'IMDb'}
+        itemNameDict = {"导演": 'director', "编剧": 'scripter', "主演": 'actor', "类型": 'subject', "集数": 'episode',
+                        "季数": 'season', "单集片长": 'length', "片长": 'length', "官方网站": 'website', "制片国家/地区": "country/region",
+                        "语言": 'language', "首播": 'date-published', "上映日期": 'date-published', "又名": 'other-name', "IMDb链接": 'IMDb'}
         punct = ", ; . / : ， 。 ： ； /".split()
         for item in infolist:
             detail = item.css("::text").extract()
@@ -73,26 +74,29 @@ class doubanSpider(scrapy.Spider):
                 if itemName[-1] in punct:
                     itemName = itemName[:-1]
                 itemContents = [e.strip() for e in detail if e.strip() and e.strip() not in punct]
-                if len(itemContents) == 1 and itemName != '类型':
-                    itemContents = itemContents[0]
 
                 if itemName == '集数':
-                    numEpi = ''.join([e for e in itemContents if e.isdigit()])
+                    numEpi = ''.join([e for e in itemContents[0] if e.isdigit()])
                     if numEpi:
                         itemContents = int(numEpi)
 
                 elif itemName == '季数':
-                    if isinstance(itemContents, list):
-                        itemContents = len(itemContents)
+                    if isinstance(itemContents[0], list):
+                        itemContents = len(itemContents[0])
                     else:
-                        itemContents = int(itemContents)
+                        itemContents = int(itemContents[0])
 
-                elif itemName == '单集片长':
-                    itemContents = itemContents.replace(' ', '').replace('min', '分钟')
+                elif itemName in ['单集片长', '片长']:
+                    itemContents = itemContents[0].replace(' ', '').replace('min', '分钟')
                     if '分钟' not in itemContents:
                         itemContents += '分钟'
-                
-                elif itemName not in itemContents_dict:
+
+                elif itemName in ['制片国家/地区', '语言', '首播', '上映日期', '又名']:
+                    if len(itemContents) == 1:
+                        itemContents = [s.strip() for s in itemContents[0].split('/') if s.strip()]
+
+
+                elif itemName not in itemNameDict:
                     continue
 
                 movie[itemNameDict[itemName]] = itemContents
@@ -109,5 +113,33 @@ class doubanSpider(scrapy.Spider):
         rating_per = {str(5 - i)+"星": weight for i, weight in enumerate(weights)}
         movie['stars'] = rating_per
 
-        yield movie
+        # yield movie
 
+        db = MongoClient().Douban
+        movies = db.movies
+        total = db.total
+        # movies.insert_one(movie)
+        movieType = total.find_one({'movieID': movie['movieID']})['type']
+        total.update_one({'movieID': movie['movieID']}, {'$set': {'request-code': 200}})
+        movie['type'] = movieType
+
+
+        recommendations = []
+        related_list = response.css("div.recommendations-bd dl")
+        for related_one in related_list:
+            link_to = related_one.css("dt a::attr(href)").extract_first()
+            if link_to:
+                link_url = link_to.split('?')[0].strip()
+                link_id = int(link_url.split('/')[-2])
+                recommendations.append(link_id)
+                exist = total.find_one({'movieID': link_id})
+                if not exist:
+                    link_title = related_one.css("dd a::text").extract_first()
+                    total.insert_one({'movieID': link_id, 'url': link_url, 'title-zh': link_title, 'type': movieType, 'country/region': [], 'request-code': 0})
+                else:
+                    new_type = list(set(movieType + exist['type']))
+                    total.update_one({'movieID': link_id}, {'$set': {'type': new_type}})
+
+        movie['recommendation'] = recommendations
+        yield movie
+        movies.insert_one(movie)

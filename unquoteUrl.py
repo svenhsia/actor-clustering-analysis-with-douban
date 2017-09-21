@@ -19,7 +19,7 @@ movieList = list(col.find())
 lack_info = []
 for movie in movieList:
     types = movie['type']
-    country = movie['country/region']
+    country = movie['country/region'] if movie.get('country/region') else []
     types_unquoted = [unquote(t) for t in types if t.strip()]
     country_unquoted = [unquote(c) for c in country if c.strip()]
     if not types_unquoted and not country_unquoted:
